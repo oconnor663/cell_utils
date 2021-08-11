@@ -1,6 +1,7 @@
 # `cell_utils`
 
-This Rust crate contains two utilities for working with `Cell`:
+This Rust crate contains two utilities for working with
+[`std::cell::Cell`](https://doc.rust-lang.org/std/cell/struct.Cell.html):
 `array_of_cells` and `project!`.
 
 The `array_of_cells` function converts between `&Cell<[T; N]>` and `&[Cell<T>;
@@ -37,3 +38,6 @@ let baz_cell: &Cell<i32> = project!(foo_cell.bar.baz);
 baz_cell.set(99);
 assert_eq!(foo.bar.baz, 99);
 ```
+
+The `project!` macro was inspired by the
+[`cell-project`](https://crates.io/crates/cell-project) crate.

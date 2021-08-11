@@ -1,6 +1,6 @@
-//! This crate provides two utilities for working with cell
-//! [`Cell`](https://doc.rust-lang.org/std/cell/struct.Cell.html), the `array_of_cells` function
-//! and the `project!` macro.
+//! This crate provides two utilities for working with
+//! [`std::cell::Cell`](https://doc.rust-lang.org/std/cell/struct.Cell.html), the `array_of_cells`
+//! function and the `project!` macro.
 //!
 //! # Examples
 //!
