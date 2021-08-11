@@ -24,6 +24,17 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_project() {
+        struct Foo {
+            x: i32,
+        }
+        let mut tuple = (Foo { x: 0 }, Foo { x: 1 });
+        let tuple_cell = Cell::from_mut(&mut tuple);
+        project!(tuple_cell.0.x).set(99);
+        assert_eq!(tuple.0.x, 99);
+    }
+
+    #[test]
     fn test_array_of_cells() {
         let cell = Cell::new([1, 2, 3]);
         let array_of_cells: &[Cell<i32>; 3] = array_of_cells(&cell);
