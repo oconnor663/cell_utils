@@ -104,10 +104,9 @@ pub fn array_of_cells<T, const N: usize>(cell: &Cell<[T; N]>) -> &[Cell<T>; N] {
 /// ```
 /// # use cell_utils::project;
 /// # use core::cell::Cell;
-/// let mut tuple = ("foo", "bar", "baz");
-/// let tuple_cell: &Cell<_> = Cell::from_mut(&mut tuple);
-/// project!(tuple_cell.0).set("hello");
-/// assert_eq!(tuple.0, "hello");
+/// let mut tuple = Cell::new(("foo", "bar", "baz"));
+/// project!((&tuple).0).set("hello");
+/// assert_eq!(tuple.into_inner().0, "hello");
 /// ```
 #[macro_export]
 macro_rules! project {
