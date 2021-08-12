@@ -36,8 +36,6 @@
 
 #![no_std]
 
-use core::cell::Cell;
-
 /// Given a reference to a [`Cell`](https://doc.rust-lang.org/std/cell/struct.Cell.html) containing
 /// an array, return a reference to an array of cells.
 ///
@@ -57,9 +55,11 @@ use core::cell::Cell;
 /// array[0].set(99);
 /// assert_eq!(cell.into_inner(), [99, 2, 3]);
 /// ```
-pub fn array_of_cells<T, const N: usize>(cell: &Cell<[T; N]>) -> &[Cell<T>; N] {
+pub fn array_of_cells<T, const N: usize>(
+    cell: &core::cell::Cell<[T; N]>,
+) -> &[core::cell::Cell<T>; N] {
     // SAFETY: `Cell<T>` has the same memory layout as `T`.
-    unsafe { &*(cell as *const Cell<[T; N]> as *const [Cell<T>; N]) }
+    unsafe { &*(cell as *const core::cell::Cell<[T; N]> as *const [core::cell::Cell<T>; N]) }
 }
 
 /// Given a reference to a [`Cell`](https://doc.rust-lang.org/std/cell/struct.Cell.html) containing
@@ -113,7 +113,7 @@ macro_rules! project {
     ($e:ident $(. $field:tt)* ) => {{
         let cell: &core::cell::Cell<_> = $e;
         // SAFETY: We need this helper function to bind the lifetime of the reference.
-        unsafe fn get_mut<T>(cell: &Cell<T>) -> &mut T { &mut *cell.as_ptr() }
+        unsafe fn get_mut<T>(cell: &core::cell::Cell<T>) -> &mut T { &mut *cell.as_ptr() }
         let reference = unsafe { get_mut(cell) };
         $( let reference = &mut reference.$field; )*
         core::cell::Cell::from_mut(reference)
@@ -121,7 +121,7 @@ macro_rules! project {
     (( $e:expr ) $(. $field:tt)* ) => {{
         let cell: &core::cell::Cell<_> = $e;
         // SAFETY: We need this helper function to bind the lifetime of the reference.
-        unsafe fn get_mut<T>(cell: &Cell<T>) -> &mut T { &mut *cell.as_ptr() }
+        unsafe fn get_mut<T>(cell: &core::cell::Cell<T>) -> &mut T { &mut *cell.as_ptr() }
         let reference = unsafe { get_mut(cell) };
         $( let reference = &mut reference.$field; )*
         core::cell::Cell::from_mut(reference)
@@ -164,6 +164,7 @@ fn _compile_fail_test_expression() {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::cell::Cell;
 
     #[test]
     fn test_project() {
