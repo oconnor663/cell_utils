@@ -113,19 +113,15 @@ pub fn array_of_cells<T, const N: usize>(cell: &Cell<[T; N]>) -> &[Cell<T>; N] {
 macro_rules! project {
     ($e:ident $(. $field:tt)* ) => {{
         let cell: &core::cell::Cell<_> = $e;
-        $(
-        let field_mut = unsafe { &mut (*cell.as_ptr()).$field };
-        let cell = core::cell::Cell::from_mut(field_mut);
-        )*
-        cell
+        let reference = unsafe { &mut *cell.as_ptr() };
+        $( let reference = &mut reference.$field; )*
+        core::cell::Cell::from_mut(reference)
     }};
     (( $e:expr ) $(. $field:tt)* ) => {{
         let cell: &core::cell::Cell<_> = $e;
-        $(
-        let field_mut = unsafe { &mut (*cell.as_ptr()).$field };
-        let cell = core::cell::Cell::from_mut(field_mut);
-        )*
-        cell
+        let reference = unsafe { &mut *cell.as_ptr() };
+        $( let reference = &mut reference.$field; )*
+        core::cell::Cell::from_mut(reference)
     }};
 }
 
