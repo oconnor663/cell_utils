@@ -112,17 +112,54 @@ pub fn array_of_cells<T, const N: usize>(cell: &Cell<[T; N]>) -> &[Cell<T>; N] {
 macro_rules! project {
     ($e:ident $(. $field:tt)* ) => {{
         let cell: &core::cell::Cell<_> = $e;
-        let reference = unsafe { &mut *cell.as_ptr() };
+        // SAFETY: We need this helper function to bind the lifetime of the reference.
+        unsafe fn get_mut<T>(cell: &Cell<T>) -> &mut T { &mut *cell.as_ptr() }
+        let reference = unsafe { get_mut(cell) };
         $( let reference = &mut reference.$field; )*
         core::cell::Cell::from_mut(reference)
     }};
     (( $e:expr ) $(. $field:tt)* ) => {{
         let cell: &core::cell::Cell<_> = $e;
-        let reference = unsafe { &mut *cell.as_ptr() };
+        // SAFETY: We need this helper function to bind the lifetime of the reference.
+        unsafe fn get_mut<T>(cell: &Cell<T>) -> &mut T { &mut *cell.as_ptr() }
+        let reference = unsafe { get_mut(cell) };
         $( let reference = &mut reference.$field; )*
         core::cell::Cell::from_mut(reference)
     }};
 }
+
+// This is a hacky way of using doctests to guarantee that something fails to compile, as described
+// in https://stackoverflow.com/a/55327334/823869. Note that these tests tends to be fragile: We
+// want them to fail for a specific reason, but new errors might get introduced that make them fail
+// for different reasons, and then we'd no longer be testing what we thought we were. I'm not sure
+// there's much we can do about that other than occasionally removing these `compile_fail`
+// annotations and sanity checking that the errors look like what we expect.
+//
+// In these two cases, we're testing lifetime errors. This exercises the lifetime bindings
+// commented on in the macro code above.
+/// ```compile_fail
+/// use std::cell::Cell;
+/// use cell_utils::project;
+/// let y = {
+///     let x = Cell::new(5);
+///     let x = &x;
+///     // FAIL: This reference outlives x.
+///     project!(x)
+/// };
+/// y.set(6)
+/// ```
+fn _compile_fail_test_identifier() {}
+/// ```compile_fail
+/// use std::cell::Cell;
+/// use cell_utils::project;
+/// let y = {
+///     let x = Cell::new(5);
+///     // FAIL: This reference outlives x.
+///     project!((&x))
+/// };
+/// y.set(6)
+/// ```
+fn _compile_fail_test_expression() {}
 
 #[cfg(test)]
 mod tests {
@@ -140,6 +177,15 @@ mod tests {
     }
 
     #[test]
+    fn test_project_self() {
+        let x = &Cell::new(5);
+        // This is the case where we don't actually include any field names.
+        let y = project!(x);
+        y.set(6);
+        assert_eq!(x.get(), 6);
+    }
+
+    #[test]
     fn test_project_expr() {
         struct Foo {
             x: i32,
@@ -147,6 +193,15 @@ mod tests {
         let mut tuple = (Foo { x: 0 }, Foo { x: 1 });
         project!((Cell::from_mut(&mut tuple)).0.x).set(99);
         assert_eq!(tuple.0.x, 99);
+    }
+
+    #[test]
+    fn test_project_self_expr() {
+        let x = Cell::new(5);
+        // This is the case where we don't actually include any field names.
+        let y = project!((&x));
+        y.set(6);
+        assert_eq!(x.get(), 6);
     }
 
     #[test]
