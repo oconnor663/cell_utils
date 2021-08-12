@@ -63,9 +63,7 @@ pub fn array_of_cells<T, const N: usize>(cell: &Cell<[T; N]>) -> &[Cell<T>; N] {
 }
 
 /// Given a reference to a [`Cell`](https://doc.rust-lang.org/std/cell/struct.Cell.html) containing
-/// a struct or a tuple, return a reference one of the fields or elements of that object.
-///
-/// # Example
+/// a struct or a tuple, return a reference one of the fields or elements of that object:
 ///
 /// ```
 /// # use cell_utils::project;
@@ -83,9 +81,25 @@ pub fn array_of_cells<T, const N: usize>(cell: &Cell<[T; N]>) -> &[Cell<T>; N] {
 /// assert_eq!(foo.bar.baz, 99);
 /// ```
 ///
-/// # Example
+/// If you want to use any expression other than a bare variable name, you need to surround it with
+/// an extra set of parentheses:
 ///
-/// This also works with tuples:
+/// ```
+/// # use cell_utils::project;
+/// # use core::cell::Cell;
+/// # struct Foo {
+/// #     bar: Bar,
+/// # }
+/// # struct Bar {
+/// #     baz: i32,
+/// # }
+/// let mut foo = Foo { bar: Bar { baz: 42 } };
+/// let baz_cell: &Cell<i32> = project!((Cell::from_mut(&mut foo)).bar.baz);
+/// baz_cell.set(99);
+/// assert_eq!(foo.bar.baz, 99);
+/// ```
+///
+/// `project!` also supports tuples:
 ///
 /// ```
 /// # use cell_utils::project;
@@ -98,6 +112,14 @@ pub fn array_of_cells<T, const N: usize>(cell: &Cell<[T; N]>) -> &[Cell<T>; N] {
 #[macro_export]
 macro_rules! project {
     ($e:ident $(. $field:tt)* ) => {{
+        let cell: &core::cell::Cell<_> = $e;
+        $(
+        let field_mut = unsafe { &mut (*cell.as_ptr()).$field };
+        let cell = core::cell::Cell::from_mut(field_mut);
+        )*
+        cell
+    }};
+    (( $e:expr ) $(. $field:tt)* ) => {{
         let cell: &core::cell::Cell<_> = $e;
         $(
         let field_mut = unsafe { &mut (*cell.as_ptr()).$field };
@@ -119,6 +141,16 @@ mod tests {
         let mut tuple = (Foo { x: 0 }, Foo { x: 1 });
         let tuple_cell = Cell::from_mut(&mut tuple);
         project!(tuple_cell.0.x).set(99);
+        assert_eq!(tuple.0.x, 99);
+    }
+
+    #[test]
+    fn test_project_expr() {
+        struct Foo {
+            x: i32,
+        }
+        let mut tuple = (Foo { x: 0 }, Foo { x: 1 });
+        project!((Cell::from_mut(&mut tuple)).0.x).set(99);
         assert_eq!(tuple.0.x, 99);
     }
 
