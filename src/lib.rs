@@ -35,6 +35,8 @@
 
 #![no_std]
 
+use core::cell::{Cell, UnsafeCell};
+
 /// Given a reference to a [`Cell`](https://doc.rust-lang.org/std/cell/struct.Cell.html) containing
 /// an array, return a reference to an array of cells.
 ///
@@ -54,11 +56,9 @@
 /// array[0].set(99);
 /// assert_eq!(cell.into_inner(), [99, 2, 3]);
 /// ```
-pub fn array_of_cells<T, const N: usize>(
-    cell: &core::cell::Cell<[T; N]>,
-) -> &[core::cell::Cell<T>; N] {
+pub fn array_of_cells<T, const N: usize>(cell: &Cell<[T; N]>) -> &[Cell<T>; N] {
     // SAFETY: `Cell<T>` has the same memory layout as `T`.
-    unsafe { &*(cell as *const core::cell::Cell<[T; N]> as *const [core::cell::Cell<T>; N]) }
+    unsafe { &*(cell as *const Cell<[T; N]> as *const [Cell<T>; N]) }
 }
 
 /// Given a reference to a [`Cell`](https://doc.rust-lang.org/std/cell/struct.Cell.html) containing
@@ -164,10 +164,34 @@ macro_rules! project {
 /// ```
 fn _compile_fail_test() {}
 
+#[repr(transparent)]
+pub struct ReadOnlyCell<T>(UnsafeCell<T>);
+
+impl<T> ReadOnlyCell<T> {
+    pub fn new(val: T) -> Self {
+        Self(UnsafeCell::new(val))
+    }
+
+    pub fn from_ref(t: &T) -> &Self {
+        // SAFETY: &ReadOnlyCell<T> is strictly less capable than &T
+        unsafe { &*(t as *const T as *const Self) }
+    }
+
+    pub fn from_cell_ref(t: &Cell<T>) -> &Self {
+        // SAFETY: &ReadOnlyCell<T> is strictly less capable than &Cell<T>
+        unsafe { &*(t as *const Cell<T> as *const Self) }
+    }
+}
+
+impl<T: Copy> ReadOnlyCell<T> {
+    pub fn get(&self) -> T {
+        unsafe { *self.0.get() }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use core::cell::Cell;
 
     #[test]
     fn test_project() {
@@ -216,5 +240,22 @@ mod tests {
         let array_of_cells: &[Cell<i32>; 3] = array_of_cells(&cell);
         array_of_cells[0].set(99);
         assert_eq!(cell.into_inner(), [99, 2, 3]);
+    }
+
+    #[test]
+    fn test_read_only_cell() {
+        let my_int = &mut 42;
+
+        let shared_ref = &*my_int;
+        let read_only_cell = ReadOnlyCell::from_ref(shared_ref);
+        assert_eq!(read_only_cell.get(), 42);
+
+        *my_int += 1;
+
+        let cell_ref = Cell::from_mut(my_int);
+        let read_only_cell = ReadOnlyCell::from_cell_ref(cell_ref);
+        assert_eq!(read_only_cell.get(), 43);
+        cell_ref.set(44);
+        assert_eq!(read_only_cell.get(), 44);
     }
 }
