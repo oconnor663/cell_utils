@@ -11,29 +11,31 @@ impl<F: FnMut()> Drop for OnDrop<F> {
 }
 
 thread_local! {
-    static WITH_STACK: Cell<*const WithStackEntry> = Cell::new(ptr::null());
+    static BORROW_STACK: Cell<*const BorrowEntry> = Cell::new(ptr::null());
 }
 
 #[derive(Copy, Clone)]
-struct WithStackEntry {
+struct BorrowEntry {
     cell_address: usize,
-    next: *const WithStackEntry,
+    next: *const BorrowEntry,
 }
 
 #[repr(transparent)]
 pub struct WithCell<T>(UnsafeCell<T>);
-
-impl<T> WithCell<T> {}
 
 impl<T> WithCell<T> {
     pub fn new(t: T) -> Self {
         Self(UnsafeCell::new(t))
     }
 
+    pub fn into_inner(self) -> T {
+        self.0.into_inner()
+    }
+
     pub fn with<U>(&self, f: impl FnOnce(&T) -> U) -> U {
-        WITH_STACK.with(|stack| {
+        BORROW_STACK.with(|stack| {
             let previous_head = stack.get();
-            let new_head = WithStackEntry {
+            let new_head = BorrowEntry {
                 cell_address: self as *const Self as usize,
                 next: previous_head,
             };
@@ -43,19 +45,19 @@ impl<T> WithCell<T> {
         })
     }
 
-    fn assert_not_in_stack(&self) {
+    fn assert_not_borrowed(&self) {
         let self_address = self as *const Self as usize;
-        WITH_STACK.with(|stack| {
+        BORROW_STACK.with(|stack| {
             let mut entry_ptr = stack.get();
             while let Some(entry) = unsafe { entry_ptr.as_ref() } {
-                assert_ne!(self_address, entry.cell_address);
+                assert_ne!(self_address, entry.cell_address, "address is borrowed");
                 entry_ptr = entry.next;
             }
         });
     }
 
     pub fn replace(&self, t: T) -> T {
-        self.assert_not_in_stack();
+        self.assert_not_borrowed();
         unsafe { mem::replace(&mut *self.0.get(), t) }
     }
 
@@ -67,16 +69,119 @@ impl<T> WithCell<T> {
         if ptr::eq(self, other) {
             return;
         }
-        self.assert_not_in_stack();
-        other.assert_not_in_stack();
+        self.assert_not_borrowed();
+        other.assert_not_borrowed();
         unsafe {
             mem::swap(&mut *self.0.get(), &mut *other.0.get());
         }
     }
 }
 
+impl<T: Copy> WithCell<T> {
+    pub fn get(&self) -> T {
+        unsafe { *self.0.get() }
+    }
+}
+
+impl<T: Clone> WithCell<T> {
+    // It seems more useful to return T than to actually implement Clone and return WithCell<T>?
+    // Feedback needed.
+    pub fn clone(&self) -> T {
+        self.with(|t| t.clone())
+    }
+}
+
 impl<T: Default> WithCell<T> {
     pub fn take(&self) -> T {
         self.replace(T::default())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_set_get() {
+        let x = WithCell::new(0);
+        assert_eq!(0, x.get());
+        x.set(1);
+        assert_eq!(1, x.get());
+    }
+
+    #[test]
+    fn test_replace() {
+        let x = WithCell::new(0);
+        assert_eq!(0, x.replace(1));
+        assert_eq!(1, x.replace(2));
+        assert_eq!(2, x.into_inner());
+    }
+
+    #[test]
+    fn test_swap() {
+        let x = WithCell::new(0);
+        let y = WithCell::new(1);
+        x.swap(&y);
+        assert_eq!(1, x.get());
+        assert_eq!(0, y.get());
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_replace_panic() {
+        let x = WithCell::new(0);
+        x.with(|_| {
+            x.set(1);
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_replace_panic_nested() {
+        let x = WithCell::new(0);
+        let y = WithCell::new(0);
+        let z = WithCell::new(0);
+        x.with(|_| {
+            y.with(|_| {
+                z.with(|_| {
+                    y.set(1);
+                });
+            });
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_swap_panic_left() {
+        let x = WithCell::new(0);
+        x.with(|_| {
+            x.swap(&WithCell::new(1));
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_swap_panic_right() {
+        let x = WithCell::new(0);
+        x.with(|_| {
+            WithCell::new(0).swap(&x);
+        });
+    }
+
+    #[test]
+    fn test_swap_self_doesnt_panic() {
+        let x = WithCell::new(0);
+        x.with(|_| {
+            x.swap(&x);
+            assert_eq!(0, x.get());
+        });
+    }
+
+    #[test]
+    fn test_take() {
+        let x = WithCell::new(String::from("foo"));
+        x.with(|s| assert_eq!(s, "foo"));
+        assert_eq!(x.take(), "foo");
+        x.with(|s| assert_eq!(s, ""));
     }
 }
