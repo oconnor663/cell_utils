@@ -28,6 +28,10 @@ impl<T> WithCell<T> {
         Self(UnsafeCell::new(t))
     }
 
+    pub fn from_mut(t: &mut T) -> &Self {
+        unsafe { &*(t as *mut T as *mut Self) }
+    }
+
     pub fn into_inner(self) -> T {
         self.0.into_inner()
     }
@@ -85,7 +89,8 @@ impl<T: Copy> WithCell<T> {
 
 impl<T: Clone> WithCell<T> {
     // It seems more useful to return T than to actually implement Clone and return WithCell<T>?
-    // Feedback needed.
+    // Callers can convert between T and WithCell<T> freely, though, so it's not a huge deal either
+    // way. Feedback needed.
     pub fn clone(&self) -> T {
         self.with(|t| t.clone())
     }
@@ -183,5 +188,16 @@ mod test {
         x.with(|s| assert_eq!(s, "foo"));
         assert_eq!(x.take(), "foo");
         x.with(|s| assert_eq!(s, ""));
+    }
+
+    #[test]
+    fn test_from_mut() {
+        let mut s = String::from("foo");
+        let c1 = WithCell::from_mut(&mut s);
+        let c2 = c1;
+        c1.with(|s| assert_eq!(s, "foo"));
+        c2.set(String::from("bar"));
+        c1.with(|s| assert_eq!(s, "bar"));
+        assert_eq!(s, "bar");
     }
 }
