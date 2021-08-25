@@ -133,10 +133,19 @@ mod test {
 
     #[test]
     #[should_panic]
-    fn test_replace_panic() {
+    fn test_set_panic() {
         let x = WithCell::new(0);
         x.with(|_| {
             x.set(1);
+        });
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_replace_panic() {
+        let x = WithCell::new(0);
+        x.with(|_| {
+            x.replace(1);
         });
     }
 
